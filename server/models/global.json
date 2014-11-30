@@ -1,0 +1,18 @@
+{
+    "navs": [
+        {
+            "name": "Home",
+            "url": "/spa/"
+        },
+
+        {
+            "name": "Contact",
+            "url": "/spa/contact"
+        },
+
+        {
+            "name": "About",
+            "url": "/spa/about"
+        }
+    ]
+}

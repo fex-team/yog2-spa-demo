@@ -1,0 +1,9 @@
+body {
+    padding-top: 50px;
+    padding-bottom: 20px;
+}
+
+#middle {
+    min-height: 300px;
+    margin: 1em;
+}
