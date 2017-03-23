@@ -1,5 +1,4 @@
-Welcome to yogurt.
-
-The demo is created at {{ date }}.
-
-{% widget "spa:widget/pagelets/about/about.tpl" id="about" mode="async" %}
+<div class="home">
+    <p>Welcome to yogurt.</p>
+    <p>Pagelet render: {{pageletTime}}</p>
+</div>

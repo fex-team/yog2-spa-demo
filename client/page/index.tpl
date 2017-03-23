@@ -2,7 +2,8 @@
 
 {% block content %}
      <div id="pages-container">
-        {% spage "spa:widget/pagelets/home/home.tpl" for="pages-container" %}
+        <p>Pagelet is loading in 500ms</p>
+        {% widget "spa:widget/pagelets/home/home.tpl" for="pages-container" id="spage" mode="async"%}
      </div>
 
      {% script %}

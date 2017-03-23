@@ -1,3 +1,10 @@
+/**
+* @file BigPipe前端SDK
+* @version 1.0
+*/
+
+/* eslint-disable */
+
 (function (root) {
     // BigPipe 依赖的各种处理器
     // 可以通过此部分换成 [lazyrender](https://github.com/rgrove/lazyload/)，
@@ -49,7 +56,9 @@
         script.setAttribute('src', url);
         script.setAttribute('type', 'text/javascript');
         script.onload = script.onerror = wrap;
-        script.onreadystatechange = wrap;
+        script.onreadystatechange = function () {
+            /loaded|complete/.test(script.readyState) && wrap();
+        };
         head.appendChild(script);
     }
 
@@ -70,13 +79,24 @@
         link.rel = 'stylesheet';
         link.href = url;
 
+        function onCssLoaded() {
+            loadedRes[url] = true;
+            if (ignoreDuplicate) {
+                for (var i = 0; i < loadingRes[url].length; i++) {
+                    loadingRes[url][i] && loadingRes[url][i]();
+                }
+                loadingRes[url] = null;
+            }
+            cb();
+        }
+
         if (browser === 'msie') {
             link.onreadystatechange = function () {
-                /loaded|complete/.test(link.readyState) && cb();
+                /loaded|complete/.test(link.readyState) && onCssLoaded();
             }
         }
         else if (browser === 'opera') {
-            link.onload = cb;
+            link.onload = onCssLoaded;
         }
         else {
             // FF, Safari, Chrome
@@ -88,14 +108,7 @@
                     setTimeout(arguments.callee, 20);
                     return;
                 }
-                loadedRes[url] = true;
-                if (ignoreDuplicate) {
-                    for (var i = 0; i < loadingRes[url].length; i++) {
-                        loadingRes[url][i] && loadingRes[url][i]();
-                    }
-                    loadingRes[url] = null;
-                }
-                cb();
+                onCssLoaded();
             })();
         }
 
@@ -108,9 +121,9 @@
     function globalEval(code) {
         var script;
 
-        code = code.replace(/^\s+/, '').replace(/\s+$/, '');
-
         if (code) {
+            code = code.replace(/^\s+/, '').replace(/\s+$/, '');
+
             if (code.indexOf('use strict') === 1) {
                 script = document.createElement('script');
                 script.text = code;
@@ -118,6 +131,28 @@
             }
             else {
                 eval(code);
+            }
+        }
+    }
+
+    function saveLoadedRes() {
+        var domain = window.location.protocol + '//' + window.location.host;
+        var scripts = document.getElementsByTagName('script');
+        var links = document.getElementsByTagName('link');
+        for (var i = 0; i < scripts.length; i++) {
+            addRes(scripts[i].src);
+        }
+        for (var j = 0; j < links.length; j++) {
+            addRes(links[j].href);
+        }
+
+        function addRes(url) {
+            if (url) {
+                loadedRes[url] = true;
+                // 同时保存一份无domain的数据处理原始URL是绝对路径的情况
+                if (url.indexOf(domain) === 0) {
+                    loadedRes[url.replace(domain, '')] = true;
+                }
             }
         }
     }
@@ -136,7 +171,12 @@
 
         xhr.onreadystatechange = function () {
             if (this.readyState == 4) {
-                cb(this.responseText);
+                if (this.status !== 200) {
+                    cb(this.responseText);
+                }
+                else {
+                    cb(null, this.responseText);
+                }
             }
         };
         xhr.open(data ? 'POST' : 'GET', url + '&t=' + (new Date()).getTime(), true);
@@ -165,6 +205,7 @@
         loadCss: loadCss,
         appendStyle: appendStyle,
         globalEval: globalEval,
+        saveLoadedRes: saveLoadedRes,
         ajax: ajax,
         mixin: mixin
     };
@@ -309,7 +350,7 @@
             var item = {
                 cssLoaded: false,
                 finish: function () {
-                    insertDom();
+                    insertDom(data);
                 }
             };
 
@@ -412,8 +453,9 @@
 
         var count = 0,
             pagelets = [],
-            /* registered pagelets */
+        /* registered pagelets */
             currReqID = null,
+            resourceChecked = false,
             cache = {},
             globalBigPipeLoadIndex = 0;
 
@@ -424,6 +466,10 @@
             // - after chunk output pagelet.
             // - after async load quickling pagelet.
             onPageletArrive: function (obj) {
+                if (!resourceChecked) {
+                    Util.saveLoadedRes();
+                    resourceChecked = true;
+                }
                 currReqID = obj.reqID;
                 // console.log('arrive', obj.id);
                 this.trigger('pageletarrive', obj);
@@ -469,6 +515,7 @@
             // params:
             //   - pagelets       pagelet id or array of pagelet id.
             //   - param          extra params for the ajax call.
+            //   - search         replace location.search for the ajax call, without '?'.
             //   - container      by default, the pagelet will be rendered in
             //                    some document node with the same id. With this
             //                    option the pagelet can be renndered in
@@ -500,7 +547,7 @@
                     } : pagelets;
                     pagelets = obj.pagelet || obj.pagelets;
                     typeof pagelets === 'string' &&
-                        (pagelets = pagelets.split(/\s*,\s*/));
+                    (pagelets = pagelets.split(/\s*,\s*/));
                 }
 
                 for (i = pagelets.length - 1; i >= 0; i--) {
@@ -513,7 +560,7 @@
 
                 function onPageArrive(data) {
                     // !data.reqID 用于兼容老版本未返回reqID的情况
-                    if (data.reqID === undefined || data.reqID === pageletRequestID) {
+                    if (data.reqID === undefined || data.reqID === null || data.reqID === pageletRequestID) {
                         var id = data.id;
                         // console.log('req', data.reqID, 'pagelet', data.id, 'arrive');
                         remaining++;
@@ -524,11 +571,17 @@
 
                 BigPipe.on('pageletarrive', onPageArrive);
                 obj.search && args.push(obj.search);
+                obj.param && args.push(obj.param);
                 if (obj.url) {
                     url = obj.url + (obj.url.indexOf('?') === -1 ? '?' : '&') + args.join('&');
                 }
                 else {
-                    url = (location.search ? location.search + '&' : '?') + args.join('&');
+                    if (!obj.search) {
+                        url = (location.search ? location.search + '&' : '?') + args.join('&');
+                    }
+                    else {
+                        url = '?' + args.join('&');
+                    }
                 }
                 BigPipe.on('pageletdone', function (pagelet, res) {
                     // !res.reqID 用于兼容老版本未返回reqID的情况
@@ -553,7 +606,10 @@
                     Util.globalEval(requestCache.content);
                 }
                 else {
-                    Util.ajax(url, function (res) {
+                    Util.ajax(url, function (err, res) {
+                        if (err) {
+                            return obj.cb && obj.cb(err);
+                        }
                         // if the page url has been moved.
                         if (currentPageUrl !== location.href) {
                             return;

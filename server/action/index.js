@@ -1,15 +1,23 @@
-var navModel = require('../models/nav.js');
+import * as navModel from '../models/nav';
 
-module.exports = function(req, res){
-    var data = navModel(req.url);
+const sleep = t => new Promise(_ => setTimeout(_, t));
+
+export default async function (req, res) {
+    const page = req.params.page || 'index';
+    let data = navModel(req.url);
     data.startTime = (new Date()).toString();
     //render with bigpipe
-    res.bigpipe.bind('bigpipe', function(cb){
-        setTimeout(function(){
-            cb(null, {
-                bigpipeTime: (new Date()).toString()
-            });
-        }, 2000);
+    res.bigpipe.bind('bigpipe', async () => {
+        await sleep(2000);
+        return {
+            bigpipeTime: (new Date()).toString()
+        }
     });
-    res.render('spa/page/index.tpl', data);
-};
+    res.bigpipe.bind('spage', async () => {
+        await sleep(500);
+        return {
+            pageletTime: (new Date()).toString()
+        }
+    });
+    res.render(`spa/page/${page}.tpl`, data);
+}
